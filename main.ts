@@ -548,10 +548,11 @@ function v4aEdits(lines: string[], strict: boolean): Edit[] {
       const r = raw[k]!;
       const l = r.text;
       if (l === '*** End of File') {
-        if (cur === null) {
-          cur = { anchor: null, eof: true, body: [] };
-          chunks.push(cur);
-        } else cur.eof = true;
+        // Ends the current chunk (section 8). With no chunk in progress it starts none: a chunk
+        // starts only at an `@@` line or, for the first chunk, at a body line, so an Update
+        // section holding only this line still has no chunk (and, without Move to, is a parse
+        // error at its Update File line).
+        if (cur !== null) cur.eof = true;
         cur = null;
         continue;
       }
