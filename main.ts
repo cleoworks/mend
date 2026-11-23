@@ -107,13 +107,19 @@ function normAt(tier: number, s: string): string {
   return tier === 0 ? s : tier === 1 ? trimTrail(s) : trimBoth(s);
 }
 
-/** All start positions where O occurs in `lines` at one tier (occurrences may overlap). */
-function occurrencesAt(lines: string[], o: string[], tier: number): number[] {
+/**
+ * Start positions where O occurs in `lines` at one tier (occurrences may overlap), scanning
+ * from `from` and stopping once `limit` positions are collected. Callers that only need the
+ * first position, or only need to know whether there are two, pass a limit so a file dense
+ * with occurrences is not enumerated in full; the positions returned are always a prefix of
+ * the full enumeration, in the same order.
+ */
+function occurrencesAt(lines: string[], o: string[], tier: number, from = 0, limit = Infinity): number[] {
   const out: number[] = [];
   if (o.length === 0 || o.length > lines.length) return out;
   const no = o.map((s) => normAt(tier, s));
   const nl = lines.map((s) => normAt(tier, s));
-  for (let i = 0; i + o.length <= lines.length; i += 1) {
+  for (let i = Math.max(0, from); i + o.length <= lines.length && out.length < limit; i += 1) {
     let ok = true;
     for (let j = 0; j < o.length; j += 1) {
       if (nl[i + j] !== no[j]) {
@@ -127,10 +133,10 @@ function occurrencesAt(lines: string[], o: string[], tier: number): number[] {
 }
 
 /** The first tier (0, 1, 2; only 0 when strict) at which O occurs, with its positions. */
-function findTier(lines: string[], o: string[], strict: boolean): { tier: number; at: number[] } | null {
+function findTier(lines: string[], o: string[], strict: boolean, limit = Infinity): { tier: number; at: number[] } | null {
   const max = strict ? 0 : 2;
   for (let t = 0; t <= max; t += 1) {
-    const at = occurrencesAt(lines, o, t);
+    const at = occurrencesAt(lines, o, t, 0, limit);
     if (at.length > 0) return { tier: t, at };
   }
   return null;
@@ -455,7 +461,7 @@ function srEdits(lines: string[], strict: boolean): Edit[] {
       const before = tree.get(p);
       if (before === null) throw new Fail('missing', p);
       const f = splitFile(before);
-      const found = findTier(f.lines, oldLines, strict);
+      const found = findTier(f.lines, oldLines, strict, 2);
       if (found === null) throw new Fail('no-match', p);
       if (found.at.length > 1) throw new Fail('ambiguous', p);
       const n: NLine[] = newLines.map((t) => ({ text: t, ctx: false, oi: -1 }));
@@ -610,8 +616,12 @@ function v4aEdits(lines: string[], strict: boolean): Edit[] {
         let tierUsed = 0;
         const maxT = strict ? 0 : 2;
         for (let t = 0; t <= maxT; t += 1) {
-          let cand = occurrencesAt(flines, o, t).filter((x) => x >= cursor);
-          if (ch.eof) cand = cand.filter((x) => x + o.length === flines.length);
+          // Only the first occurrence at or after the cursor is taken; an end-of-file chunk
+          // can only sit at the one position that ends at the last line, so scanning starts
+          // there instead of enumerating every occurrence in the file.
+          let cand = ch.eof
+            ? occurrencesAt(flines, o, t, Math.max(cursor, flines.length - o.length), 1).filter((x) => x + o.length === flines.length)
+            : occurrencesAt(flines, o, t, cursor, 1);
           if (cand.length > 0) {
             pos = cand[0]!;
             tierUsed = t;
