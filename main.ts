@@ -112,10 +112,11 @@ function occurrencesAt(lines: string[], o: string[], tier: number): number[] {
   const out: number[] = [];
   if (o.length === 0 || o.length > lines.length) return out;
   const no = o.map((s) => normAt(tier, s));
+  const nl = lines.map((s) => normAt(tier, s));
   for (let i = 0; i + o.length <= lines.length; i += 1) {
     let ok = true;
     for (let j = 0; j < o.length; j += 1) {
-      if (normAt(tier, lines[i + j]!) !== no[j]) {
+      if (nl[i + j] !== no[j]) {
         ok = false;
         break;
       }
